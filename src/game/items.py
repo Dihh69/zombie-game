@@ -121,6 +121,10 @@ class Item:
         muzzle_x = px + facing * 24.0
         muzzle_y = py - 4.0
 
+        speed_mult = max(0.1, getattr(player, "attack_speed_multiplier", 1.0))
+        damage_mult = getattr(player, "attack_damage_multiplier", 1.0)
+        eff_cooldown = self.fire_rate / speed_mult
+
         if self.item_type == ItemType.BOMB:
             # Arcing explosive bomb
             bomb_vx = facing * 420.0 + player.velocity.x * 0.25
@@ -129,14 +133,14 @@ class Item:
                 owner_id=player.player_id,
                 position=(muzzle_x, muzzle_y),
                 velocity=(bomb_vx, bomb_vy),
-                damage=55.0,
+                damage=55.0 * damage_mult,
                 kind="bomb",
                 radius=10,
             )
             projectiles.append(proj)
             effects.burst((muzzle_x, muzzle_y), count=6, palette=[(255, 180, 50), (255, 100, 20)])
             effects.request_shake(intensity=4.0, duration=0.15)
-            self.cooldown = self.fire_rate
+            self.cooldown = eff_cooldown
             self.ammo -= 1
 
         elif self.item_type == ItemType.WAND:
@@ -147,20 +151,20 @@ class Item:
                 owner_id=player.player_id,
                 position=(muzzle_x, muzzle_y),
                 velocity=(bolt_vx, bolt_vy),
-                damage=18.0,
+                damage=18.0 * damage_mult,
                 kind="wand",
                 radius=7,
             )
             projectiles.append(proj)
             effects.burst((muzzle_x, muzzle_y), count=8, palette=[(100, 240, 255), (240, 100, 255)])
-            self.cooldown = self.fire_rate
+            self.cooldown = eff_cooldown
             self.ammo -= 1
 
         elif self.item_type == ItemType.ROBE:
             # Defensive magic shield
             player.activate_shield(duration=6.5)
             effects.burst((px, py), count=25, palette=[(100, 200, 255), (200, 240, 255), (80, 140, 255)], strength=1.2)
-            self.cooldown = self.fire_rate
+            self.cooldown = eff_cooldown
             self.ammo -= 1
 
         elif self.item_type == ItemType.MACHINE_GUN:
@@ -170,14 +174,14 @@ class Item:
                 owner_id=player.player_id,
                 position=(muzzle_x, muzzle_y),
                 velocity=(facing * 880.0, spread),
-                damage=7.0,
+                damage=7.0 * damage_mult,
                 kind="machine_gun",
                 radius=4,
             )
             projectiles.append(proj)
             effects.burst((muzzle_x, muzzle_y), count=4, palette=[(255, 230, 100), (255, 160, 40)], strength=0.5)
             effects.request_shake(intensity=2.0, duration=0.08)
-            self.cooldown = self.fire_rate
+            self.cooldown = eff_cooldown
             self.ammo -= 1
 
         elif self.item_type == ItemType.PISTOL:
@@ -186,14 +190,14 @@ class Item:
                 owner_id=player.player_id,
                 position=(muzzle_x, muzzle_y),
                 velocity=(facing * 720.0, 0.0),
-                damage=26.0,
+                damage=26.0 * damage_mult,
                 kind="pistol",
                 radius=6,
             )
             projectiles.append(proj)
             effects.burst((muzzle_x, muzzle_y), count=10, palette=[(255, 200, 80), (255, 80, 40)], strength=0.8)
             effects.request_shake(intensity=4.5, duration=0.12)
-            self.cooldown = self.fire_rate
+            self.cooldown = eff_cooldown
             self.ammo -= 1
 
         if self.ammo <= 0:

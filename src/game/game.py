@@ -76,7 +76,17 @@ class Game:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.change_state("menu")
                 return
+            # Debug key 'c' to trigger checkpoint and shop directly
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
+                self.world.checkpoint_manager.trigger_checkpoint(self.world.left_player)
+                self.change_state("checkpoint_shop")
+                return
             self.world.handle_event(event)
+
+        elif self.state == "checkpoint_shop":
+            choice = self.world.checkpoint_manager.handle_event(event, self.world.left_player)
+            if choice is not None:
+                self.change_state("playing")
 
         elif self.state == "game_over":
             action = self.ui.handle_event(event)
@@ -101,8 +111,13 @@ class Game:
 
         elif self.state == "playing":
             self.world.update(dt)
-            if self.world.finished():
+            if self.world.checkpoint_manager.is_shop_open:
+                self.change_state("checkpoint_shop")
+            elif self.world.finished():
                 self.change_state("game_over")
+
+        elif self.state == "checkpoint_shop":
+            self.world.checkpoint_manager.update(dt)
 
         elif self.state == "game_over":
             # Settle world effects and screen shake
@@ -117,6 +132,11 @@ class Game:
         elif self.state in ("intro", "playing"):
             self.world.draw(self.screen)
             self.ui.draw_hud(self.screen, self.world.left_player, self.world.right_player)
+
+        elif self.state == "checkpoint_shop":
+            self.world.draw(self.screen)
+            self.ui.draw_hud(self.screen, self.world.left_player, self.world.right_player)
+            self.world.checkpoint_manager.draw(self.screen, self.world.left_player)
 
         elif self.state == "game_over":
             self.world.draw(self.screen)

@@ -62,6 +62,15 @@ class Player:
         self.shield_timer: float = 0.0
         self.attack_recoil: float = 0.0
 
+        # Checkpoint, Shop upgrades & Arc Timer
+        self.max_timer: float = 60.0
+        self.timer: float = self.max_timer
+        self.attack_speed_multiplier: float = 1.0
+        self.attack_damage_multiplier: float = 1.0
+        self.attack_speed_level: int = 0
+        self.attack_damage_level: int = 0
+        self.unarmed_cooldown: float = 0.0
+
         # 3-segment trailing scarf nodes
         self.scarf_nodes: list[pygame.Vector2] = [
             pygame.Vector2(spawn[0] - self.facing * 8, spawn[1] - 44),
@@ -97,6 +106,24 @@ class Player:
     def heal(self, amount: float) -> None:
         """Heal player, clamped to max health."""
         self.health = min(float(self.config.player_health), self.health + amount)
+
+    def replenish_timer(self) -> None:
+        """Fully replenish the match timer to maximum capacity."""
+        self.timer = self.max_timer
+
+    def add_time(self, amount: float) -> None:
+        """Add or subtract time units clamped between 0 and max_timer."""
+        self.timer = max(0.0, min(self.max_timer, self.timer + amount))
+
+    def upgrade_attack_speed(self, boost: float = 0.25) -> None:
+        """Apply attack speed upgrade, decreasing weapon and attack cooldowns."""
+        self.attack_speed_level += 1
+        self.attack_speed_multiplier += boost
+
+    def upgrade_attack_damage(self, boost: float = 0.30) -> None:
+        """Apply attack damage upgrade, increasing projectile and melee damage."""
+        self.attack_damage_level += 1
+        self.attack_damage_multiplier += boost
 
     def take_damage(self, amount: float, knockback: tuple[float, float] = (0, 0)) -> None:
         """Take damage with defense calculations and apply knockback."""
@@ -200,9 +227,11 @@ class Player:
             if self.held_item and self.held_item.ammo < prev_ammo:
                 self.attack_recoil = 0.16
         else:
-            cx, cy = self.center()
-            effects.burst((cx + self.facing * 20, cy), count=3, palette=[(255, 255, 200)])
-            self.attack_recoil = 0.12
+            if self.unarmed_cooldown <= 0:
+                cx, cy = self.center()
+                effects.burst((cx + self.facing * 20, cy), count=3, palette=[(255, 255, 200)])
+                self.attack_recoil = 0.12
+                self.unarmed_cooldown = 0.35 / max(0.1, self.attack_speed_multiplier)
 
     def update(
         self,
@@ -215,6 +244,8 @@ class Player:
         self.prev_bottom = self.position.y
 
         # Timers decay
+        if self.unarmed_cooldown > 0:
+            self.unarmed_cooldown = max(0.0, self.unarmed_cooldown - dt)
         if self.damage_flash > 0:
             self.damage_flash = max(0.0, self.damage_flash - dt)
         if self.shield_timer > 0:

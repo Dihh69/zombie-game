@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from src.game.camera import Camera
+from src.game.checkpoint import CheckpointManager
 from src.game.effects import EffectManager
 from src.game.items import Item, ItemSpawner
 from src.game.platforms import create_arena, platform_rects, Platform
@@ -30,6 +31,7 @@ class World:
         self.camera: Camera = Camera(config.screen_size, self.world_bounds)
         self.effects: EffectManager = EffectManager()
         self.projectile_manager: ProjectileManager = ProjectileManager()
+        self.checkpoint_manager: CheckpointManager = CheckpointManager(config)
         self.platforms: list[Platform] = create_arena(self.world_bounds)
         self.spawner: ItemSpawner = ItemSpawner(config)
         self.items: list[Item] = []
@@ -44,6 +46,7 @@ class World:
         """Reset match state, spawn fresh players, and initiate cinematic intro camera."""
         self.effects.clear()
         self.projectile_manager = ProjectileManager()
+        self.checkpoint_manager.reset()
         self.items.clear()
         self.platforms = create_arena(self.world_bounds)
         self.spawner = ItemSpawner(self.config)
