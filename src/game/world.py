@@ -8,10 +8,8 @@ import pygame
 from src.game.camera import Camera
 from src.game.checkpoint import CheckpointManager
 from src.game.effects import EffectManager
-from src.game.items import Item, ItemSpawner
 from src.game.platforms import create_arena, platform_rects, Platform
 from src.game.player import Player
-from src.game.projectiles import ProjectileManager
 
 if TYPE_CHECKING:
     from src.game.assets import AssetManager
@@ -30,11 +28,8 @@ class World:
 
         self.camera: Camera = Camera(config.screen_size, self.world_bounds)
         self.effects: EffectManager = EffectManager()
-        self.projectile_manager: ProjectileManager = ProjectileManager()
         self.checkpoint_manager: CheckpointManager = CheckpointManager(config)
         self.platforms: list[Platform] = create_arena(self.world_bounds)
-        self.spawner: ItemSpawner = ItemSpawner(config)
-        self.items: list[Item] = []
 
         self.players: list[Player] = []
         self.left_player: Player
@@ -45,11 +40,8 @@ class World:
     def reset(self) -> None:
         """Reset match state, spawn fresh players, and initiate cinematic intro camera."""
         self.effects.clear()
-        self.projectile_manager = ProjectileManager()
         self.checkpoint_manager.reset()
-        self.items.clear()
         self.platforms = create_arena(self.world_bounds)
-        self.spawner = ItemSpawner(self.config)
 
         # Spawn Left player (Player 1) on arena ground
         floor_y = float(self.world_bounds.bottom - 90)
@@ -100,36 +92,14 @@ class World:
             att_alt = p.controls.get("attack_alt", -1)
             is_attacking = p._attack_held or (att_key != -1 and keys[att_key]) or (att_alt != -1 and keys[att_alt])
             if is_attacking:
-                p.attack(self.projectile_manager.projectiles, self.effects)
+                opponents = [other for other in self.players if other is not p]
+                p.attack(targets=opponents, effects=self.effects)
 
         # 1. Update players and platform collisions (passing platforms to detect one-way platforms)
         for p in self.players:
             p.update(dt, self.platforms, self.world_bounds)
 
-        # 2. Update pickups and collect
-        newly_spawned = self.spawner.update(dt, self.world_bounds)
-        self.items.extend(newly_spawned)
-
-        for item in self.items:
-            item.update(dt, plat_boxes, self.world_bounds)
-            if item.active:
-                item_box = item.bounds
-                for p in self.players:
-                    if p.alive() and p.bounds().colliderect(item_box):
-                        item.collect(p)
-                        self.effects.burst(
-                            (item.position.x, item.position.y),
-                            count=12,
-                            palette=[(255, 230, 80), (100, 240, 255)],
-                        )
-                        break
-
-        self.items = [it for it in self.items if it.active]
-
-        # 3. Update projectiles and apply damage
-        self.projectile_manager.update(dt, plat_boxes, self.world_bounds, self.players, self.effects)
-
-        # 4. Update effects and camera
+        # 2. Update effects and camera
         self.effects.update(dt)
         self.camera.set_shake(self.effects.shake_offset())
         self.camera.update(dt)
@@ -143,18 +113,11 @@ class World:
         for plat in self.platforms:
             plat.draw(surface, self.camera)
 
-        # 3. Pickups
-        for it in self.items:
-            it.draw(surface, self.camera)
-
-        # 4. Projectiles
-        self.projectile_manager.draw(surface, self.camera)
-
-        # 5. Players
+        # 3. Players
         for p in self.players:
             p.draw(surface, self.camera)
 
-        # 6. World visual effects
+        # 4. World visual effects
         self.effects.draw(surface, self.camera)
 
     def _draw_background(self, surface: pygame.Surface) -> None:

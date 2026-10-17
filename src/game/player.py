@@ -62,14 +62,20 @@ class Player:
         self.shield_timer: float = 0.0
         self.attack_recoil: float = 0.0
 
-        # Checkpoint, Shop upgrades & Arc Timer
+        # Checkpoint, Shop upgrades, Arc Timer & Pure Melee Combat
         self.max_timer: float = 60.0
         self.timer: float = self.max_timer
         self.attack_speed_multiplier: float = 1.0
         self.attack_damage_multiplier: float = 1.0
         self.attack_speed_level: int = 0
         self.attack_damage_level: int = 0
-        self.unarmed_cooldown: float = 0.0
+        self.base_melee_damage: float = 35.0
+        self.base_attack_cooldown: float = 0.35
+        self.attack_cooldown: float = 0.0
+        self.melee_reach: float = 64.0
+        self.melee_height: float = 58.0
+        self.melee_swing_timer: float = 0.0
+        self.held_item: any = None  # Deprecated: game is purely melee combat
 
         # 3-segment trailing scarf nodes
         self.scarf_nodes: list[pygame.Vector2] = [
@@ -95,9 +101,20 @@ class Player:
         """Check if player still has health."""
         return self.health > 0
 
-    def equip(self, item: Item | None) -> None:
-        """Equip an item (or unequip by passing None)."""
-        self.held_item = item
+    def equip(self, item: any = None) -> None:
+        """Deprecated: The game is purely melee combat."""
+        self.held_item = None
+
+    def get_melee_attack_box(self) -> pygame.Rect:
+        """Return the box attack radius in the direction the player is facing."""
+        box_y = int(self.position.y - self.height - 2)
+        box_w = int(self.melee_reach)
+        box_h = int(self.melee_height)
+        if self.facing >= 0:
+            box_x = int(self.position.x)
+        else:
+            box_x = int(self.position.x - self.melee_reach)
+        return pygame.Rect(box_x, box_y, box_w, box_h)
 
     def activate_shield(self, duration: float = 6.0) -> None:
         """Activate protective robe shield status."""
@@ -216,22 +233,75 @@ class Player:
             if self.velocity.y < -120.0:
                 self.velocity.y += (self.config.gravity * 1.6) * dt
 
-    def attack(self, projectiles: list[Projectile], effects: EffectManager) -> None:
-        """Fire or use the currently held item with visual casting recoil."""
-        if not self.alive():
-            return
+    def attack(
+        self,
+        targets: list[any] | None = None,
+        effects: EffectManager | None = None,
+        projectiles: list[any] | None = None,
+    ) -> pygame.Rect | None:
+        """Execute a purely melee strike with a box attack radius in the facing direction."""
+        if not self.alive() or self.attack_cooldown > 0:
+            return None
 
-        if self.held_item:
-            prev_ammo = self.held_item.ammo
-            self.held_item.use(self, projectiles, effects)
-            if self.held_item and self.held_item.ammo < prev_ammo:
-                self.attack_recoil = 0.16
-        else:
-            if self.unarmed_cooldown <= 0:
-                cx, cy = self.center()
-                effects.burst((cx + self.facing * 20, cy), count=3, palette=[(255, 255, 200)])
-                self.attack_recoil = 0.12
-                self.unarmed_cooldown = 0.35 / max(0.1, self.attack_speed_multiplier)
+        # Cooldown scaled by attack speed upgrade
+        eff_cooldown = self.base_attack_cooldown / max(0.1, self.attack_speed_multiplier)
+        self.attack_cooldown = eff_cooldown
+        self.attack_recoil = 0.18
+        self.melee_swing_timer = 0.18
+
+        attack_box = self.get_melee_attack_box()
+        damage = self.base_melee_damage * self.attack_damage_multiplier
+
+        # Visual slash burst & subtle screen shake
+        if effects:
+            slash_cx = attack_box.centerx
+            slash_cy = attack_box.centery
+            effects.burst(
+                (slash_cx, slash_cy),
+                count=8,
+                palette=[(255, 240, 120), (255, 140, 40), (255, 255, 255)],
+                strength=0.8,
+            )
+            effects.request_shake(intensity=2.5, duration=0.08)
+
+        # Hit detection if targets are provided
+        if targets is not None:
+            # Check if targets actually contains target entities
+            valid_targets = [
+                t for t in targets
+                if t is not self and (hasattr(t, "bounds") or hasattr(t, "rect") or hasattr(t, "take_damage"))
+            ]
+            if valid_targets:
+                hit_any = False
+                for target in valid_targets:
+                    is_target_alive = getattr(target, "alive", None)
+                    if callable(is_target_alive) and not is_target_alive():
+                        continue
+
+                    target_rect = target.bounds() if hasattr(target, "bounds") else getattr(target, "rect", None)
+                    if target_rect and attack_box.colliderect(target_rect):
+                        hit_any = True
+                        kb = (self.facing * 340.0, -120.0)
+                        if hasattr(target, "take_damage"):
+                            target.take_damage(damage, knockback=kb)
+                        # Rule: Everytime you attack and hit a zombie, gain 1 unit of time
+                        self.add_time(1.0)
+                        if effects:
+                            effects.burst(
+                                (target_rect.centerx, target_rect.centery),
+                                count=10,
+                                palette=[(255, 60, 60), (255, 230, 80)],
+                            )
+                            effects.request_shake(intensity=4.0, duration=0.12)
+                        # Rule: Everytime you kill a zombie, gain 3 units of time
+                        if callable(is_target_alive) and not is_target_alive():
+                            self.add_time(3.0)
+
+                if not hit_any:
+                    # Rule: Everytime you try to attack and miss, lose 1 unit of time
+                    self.add_time(-1.0)
+
+        return attack_box
 
     def update(
         self,
@@ -244,8 +314,10 @@ class Player:
         self.prev_bottom = self.position.y
 
         # Timers decay
-        if self.unarmed_cooldown > 0:
-            self.unarmed_cooldown = max(0.0, self.unarmed_cooldown - dt)
+        if self.attack_cooldown > 0:
+            self.attack_cooldown = max(0.0, self.attack_cooldown - dt)
+        if self.melee_swing_timer > 0:
+            self.melee_swing_timer = max(0.0, self.melee_swing_timer - dt)
         if self.damage_flash > 0:
             self.damage_flash = max(0.0, self.damage_flash - dt)
         if self.shield_timer > 0:
@@ -262,10 +334,6 @@ class Player:
         # Smooth return of squash and stretch
         self.squash_stretch.x += (1.0 - self.squash_stretch.x) * min(1.0, dt * 16.0)
         self.squash_stretch.y += (1.0 - self.squash_stretch.y) * min(1.0, dt * 16.0)
-
-        # Update held item cooldown
-        if self.held_item:
-            self.held_item.update(dt, [], world_bounds)
 
         # ------------------- GRAVITY & JUMPING -------------------
         gravity = self.config.gravity
@@ -506,9 +574,9 @@ class Player:
         ]
         pygame.draw.polygon(surface, house_accent, band_pts)
 
-        # 7. Arms and Weapons (Whip / Thrust / Recoil)
+        # 7. Arms & Melee Strike Thrust
         shoulder_y = neck_y + int(4 * z)
-        hand_reach = (18.0 + (self.attack_recoil * 18.0)) * z
+        hand_reach = (16.0 + (self.attack_recoil * 28.0)) * z
         hand_x = neck_x + self.facing * int(hand_reach)
         hand_y = shoulder_y + int(2 * z) - int(self.attack_recoil * 6.0 * z)
 
@@ -518,45 +586,24 @@ class Player:
             back_arm_y = shoulder_y + int(math.sin(self.run_cycle) * 8 * z)
             pygame.draw.line(surface, stick_color, (neck_x, shoulder_y), (back_arm_x, back_arm_y), width=line_w)
 
-        # Front arm holding weapon
+        # Front arm thrusting forward with melee strike
         pygame.draw.line(surface, stick_color, (neck_x, shoulder_y), (hand_x, hand_y), width=line_w)
 
-        # Weapon in hand
-        if self.held_item:
-            item_type = self.held_item.item_type
-            from src.game.items import ItemType
+        # Knuckle / strike fist
+        fist_col = (255, 230, 100) if self.melee_swing_timer > 0 else stick_color
+        pygame.draw.circle(surface, fist_col, (hand_x, hand_y), max(2, int(4 * z)))
 
-            if item_type == ItemType.BOMB:
-                pygame.draw.circle(surface, (30, 30, 35), (hand_x, hand_y), max(2, int(7 * z)))
-                fuse_spark = (hand_x + self.facing * int(4 * z), hand_y - int(6 * z))
-                pygame.draw.circle(surface, (255, 140, 20), fuse_spark, max(1, int(3 * z)))
-
-            elif item_type == ItemType.WAND:
-                wand_len = int(18 * z)
-                wand_tip = (hand_x + self.facing * wand_len, hand_y - int(4 * z))
-                pygame.draw.line(surface, (140, 90, 40), (hand_x, hand_y), wand_tip, width=max(1, int(3 * z)))
-                pygame.draw.circle(surface, (100, 240, 255), wand_tip, max(1, int(3.5 * z)))
-                pygame.draw.circle(surface, (255, 255, 255), wand_tip, max(1, int(1.5 * z)))
-
-            elif item_type == ItemType.MACHINE_GUN:
-                gw, gh = int(18 * z), int(8 * z)
-                gun_rect = pygame.Rect(hand_x - (gw if self.facing < 0 else 0), hand_y - gh // 2, gw, gh)
-                pygame.draw.rect(surface, (70, 75, 80), gun_rect, border_radius=2)
-                pygame.draw.rect(surface, (220, 190, 50), (gun_rect.right - int(4 * z) if self.facing > 0 else gun_rect.left, hand_y - int(2 * z), int(4 * z), int(4 * z)))
-
-            elif item_type == ItemType.PISTOL:
-                gw, gh = int(14 * z), int(7 * z)
-                gun_rect = pygame.Rect(hand_x - (gw if self.facing < 0 else 0), hand_y - gh // 2, gw, gh)
-                pygame.draw.rect(surface, (50, 50, 60), gun_rect, border_radius=1)
-                pygame.draw.rect(surface, (220, 70, 50), (hand_x, hand_y, int(4 * z), int(5 * z)))
-
-            elif item_type == ItemType.ROBE:
-                pygame.draw.circle(surface, (100, 180, 255), (hand_x, hand_y), max(2, int(6 * z)))
-                pygame.draw.circle(surface, (255, 255, 255), (hand_x, hand_y), max(1, int(3 * z)))
-
-        else:
-            # Default miniature elder wand
-            wand_tip = (hand_x + self.facing * int(11 * z), hand_y - int(2 * z))
-            pygame.draw.line(surface, (120, 75, 35), (hand_x, hand_y), wand_tip, width=max(1, int(2 * z)))
-            sparkle_glow = max(1, int((2.0 + math.sin(self.anim_time * 8.0)) * z))
-            pygame.draw.circle(surface, (255, 255, 180), wand_tip, sparkle_glow)
+        # Dynamic Melee Slash Arc rendered within the box attack radius in the facing direction
+        if self.melee_swing_timer > 0:
+            s_box = camera.apply_rect(self.get_melee_attack_box())
+            if s_box.width > 4 and s_box.height > 4:
+                slash_surf = pygame.Surface((s_box.width, s_box.height), pygame.SRCALPHA)
+                alpha = int(240 * (self.melee_swing_timer / 0.18))
+                arc_r = pygame.Rect(0, 0, s_box.width, s_box.height)
+                if self.facing > 0:
+                    pygame.draw.arc(slash_surf, (255, 255, 220, alpha), arc_r, -math.pi / 2.8, math.pi / 2.8, max(2, int(4 * z)))
+                    pygame.draw.arc(slash_surf, (255, 170, 50, alpha // 2), arc_r.inflate(int(6 * z), int(6 * z)), -math.pi / 2.8, math.pi / 2.8, max(1, int(2 * z)))
+                else:
+                    pygame.draw.arc(slash_surf, (255, 255, 220, alpha), arc_r, math.pi * 0.65, math.pi * 1.35, max(2, int(4 * z)))
+                    pygame.draw.arc(slash_surf, (255, 170, 50, alpha // 2), arc_r.inflate(int(6 * z), int(6 * z)), math.pi * 0.65, math.pi * 1.35, max(1, int(2 * z)))
+                surface.blit(slash_surf, (s_box.left, s_box.top))

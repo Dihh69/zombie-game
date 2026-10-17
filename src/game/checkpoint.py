@@ -230,7 +230,7 @@ class ShopMenu:
         surface.blit(badge_text, badge_text.get_rect(center=badge_rect.center))
 
         # Description
-        desc_1 = self.body_font.render("Reduces weapon and attack cooldowns.", True, (190, 205, 225))
+        desc_1 = self.body_font.render("Reduces melee attack swing cooldown.", True, (190, 205, 225))
         desc_2 = self.body_font.render("Strike rapidly to chain hits and restore timer!", True, (160, 180, 205))
         surface.blit(desc_1, desc_1.get_rect(center=(icon_cx, rect.top + 195)))
         surface.blit(desc_2, desc_2.get_rect(center=(icon_cx, rect.top + 220)))
@@ -304,7 +304,7 @@ class ShopMenu:
         surface.blit(badge_text, badge_text.get_rect(center=badge_rect.center))
 
         # Description
-        desc_1 = self.body_font.render("Boosts damage dealt by all strikes & weapons.", True, (225, 200, 195))
+        desc_1 = self.body_font.render("Boosts damage dealt by all melee strikes.", True, (225, 200, 195))
         desc_2 = self.body_font.render("Eliminate aggressive zombies with fewer hits!", True, (205, 175, 170))
         surface.blit(desc_1, desc_1.get_rect(center=(icon_cx, rect.top + 195)))
         surface.blit(desc_2, desc_2.get_rect(center=(icon_cx, rect.top + 220)))

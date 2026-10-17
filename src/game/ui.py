@@ -214,17 +214,16 @@ class UI:
         hp_surf = self.small_font.render(hp_str, True, (255, 255, 255))
         surface.blit(hp_surf, (margin + 8, margin + 4))
 
-        # Held Item Indicator Box
-        box_rect = pygame.Rect(margin, margin + bar_h + 8, 140, 32)
+        # Combat / Timer Indicator Box
+        box_rect = pygame.Rect(margin, margin + bar_h + 8, 220, 32)
         pygame.draw.rect(surface, (20, 24, 34), box_rect, border_radius=4)
         pygame.draw.rect(surface, (100, 110, 130), box_rect, width=1, border_radius=4)
 
-        item_str = "Unarmed"
-        if left.held_item:
-            item_str = f"{left.held_item.item_type.value.upper()} ({left.held_item.ammo})"
-        elif left.shield_timer > 0:
-            item_str = f"SHIELD ({int(left.shield_timer)}s)"
-        it_surf = self.small_font.render(item_str, True, (230, 220, 180))
+        timer_val = int(getattr(left, "timer", 60.0))
+        spd_val = getattr(left, "attack_speed_multiplier", 1.0)
+        dmg_val = getattr(left, "attack_damage_multiplier", 1.0)
+        stats_str = f"TIME: {timer_val}s  SPD: {spd_val:.2f}x  DMG: {dmg_val:.2f}x"
+        it_surf = self.small_font.render(stats_str, True, (240, 225, 140))
         surface.blit(it_surf, (box_rect.x + 8, box_rect.y + 8))
 
         # ================= RIGHT PLAYER (P2) =================
@@ -253,17 +252,16 @@ class UI:
         hp2_surf = self.small_font.render(hp2_str, True, (255, 255, 255))
         surface.blit(hp2_surf, (self.sw - margin - bar_w + 8, margin + 4))
 
-        # Held Item Indicator Box (Right)
-        box2_rect = pygame.Rect(self.sw - margin - 140, margin + bar_h + 8, 140, 32)
+        # Combat / Timer Indicator Box (Right)
+        box2_rect = pygame.Rect(self.sw - margin - 220, margin + bar_h + 8, 220, 32)
         pygame.draw.rect(surface, (20, 24, 34), box2_rect, border_radius=4)
         pygame.draw.rect(surface, (100, 110, 130), box2_rect, width=1, border_radius=4)
 
-        item2_str = "Unarmed"
-        if right.held_item:
-            item2_str = f"{right.held_item.item_type.value.upper()} ({right.held_item.ammo})"
-        elif right.shield_timer > 0:
-            item2_str = f"SHIELD ({int(right.shield_timer)}s)"
-        it2_surf = self.small_font.render(item2_str, True, (190, 230, 210))
+        timer2_val = int(getattr(right, "timer", 60.0))
+        spd2_val = getattr(right, "attack_speed_multiplier", 1.0)
+        dmg2_val = getattr(right, "attack_damage_multiplier", 1.0)
+        stats2_str = f"TIME: {timer2_val}s  SPD: {spd2_val:.2f}x  DMG: {dmg2_val:.2f}x"
+        it2_surf = self.small_font.render(stats2_str, True, (160, 230, 200))
         surface.blit(it2_surf, (box2_rect.x + 8, box2_rect.y + 8))
 
         # Center Arena Title
