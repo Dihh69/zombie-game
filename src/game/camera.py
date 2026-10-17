@@ -42,10 +42,17 @@ class Camera:
         else:
             self.pan_speed = 1.0 / max(0.01, duration)
 
-    def start_intro(self, left_target: tuple[float, float], right_target: tuple[float, float]) -> None:
-        """Start the cinematic intro pan with dramatic closeup slow zoom on players."""
+    def start_intro(
+        self,
+        left_target: tuple[float, float],
+        right_target: tuple[float, float] | None = None,
+    ) -> None:
+        """Start the cinematic intro pan with dramatic closeup slow zoom on player."""
         self._left_target = pygame.Vector2(left_target[0], left_target[1])
-        self._right_target = pygame.Vector2(right_target[0], right_target[1])
+        if right_target is not None:
+            self._right_target = pygame.Vector2(right_target[0], right_target[1])
+        else:
+            self._right_target = pygame.Vector2(self._left_target)
         self._arena_center = pygame.Vector2(self.world_bounds.centerx, self.world_bounds.centery)
 
         self._intro_active = True
@@ -53,7 +60,7 @@ class Camera:
         self._intro_phase = 0
         self._intro_timer = 0.0
 
-        # Snap directly to left player and start closeup zoom
+        # Snap directly to player and start closeup zoom
         self.center = pygame.Vector2(self._left_target)
         self.target = pygame.Vector2(self._left_target)
         self.zoom = 1.35
@@ -81,54 +88,77 @@ class Camera:
         if self._intro_active:
             self._intro_timer += dt
 
-            # Phase 0: Left player closeup focus - slowly zooms in while pausing (2.0s)
-            if self._intro_phase == 0:
-                self.target = self._left_target
-                t = min(1.0, self._intro_timer / 2.0)
-                # Slow creeping zoom in on Player 1
-                self.zoom = 1.35 + (1.75 - 1.35) * (t * t)
-                if self._intro_timer >= 2.0:
-                    self._intro_phase = 1
-                    self._intro_timer = 0.0
+            is_single_player = (self._left_target == self._right_target)
+
+            if is_single_player:
+                # Single Player Intro: Quick closeup on hero, then pull back to arena
+                if self._intro_phase == 0:
+                    self.target = self._left_target
+                    t = min(1.0, self._intro_timer / 1.0)
+                    self.zoom = 1.35 + (1.65 - 1.35) * (t * t)
+                    if self._intro_timer >= 1.0:
+                        self._intro_phase = 1
+                        self._intro_timer = 0.0
+                        self.target = self._arena_center
+                elif self._intro_phase == 1:
+                    t = min(1.0, self._intro_timer / 1.0)
+                    t_smooth = t * t * (3.0 - 2.0 * t)
+                    self.center = self._left_target.lerp(self._arena_center, t_smooth)
+                    self.zoom = 1.65 + (1.0 - 1.65) * t_smooth
+                    if self._intro_timer >= 1.0:
+                        self._intro_phase = 2
+                        self._intro_timer = 0.0
+                        self.zoom = 1.0
+                        self.target_zoom = 1.0
+                        self._intro_active = False
+                        self._intro_finished = True
+
+            else:
+                # Two Player Pan Intro
+                # Phase 0: Left player closeup focus (1.8s)
+                if self._intro_phase == 0:
+                    self.target = self._left_target
+                    t = min(1.0, self._intro_timer / 1.8)
+                    self.zoom = 1.35 + (1.75 - 1.35) * (t * t)
+                    if self._intro_timer >= 1.8:
+                        self._intro_phase = 1
+                        self._intro_timer = 0.0
+                        self.target = self._right_target
+
+                # Phase 1: Smooth gliding pan across arena to right player (1.2s)
+                elif self._intro_phase == 1:
+                    t = min(1.0, self._intro_timer / 1.2)
+                    t_smooth = t * t * (3.0 - 2.0 * t)
+                    self.center = self._left_target.lerp(self._right_target, t_smooth)
+                    self.zoom = 1.70 - math.sin(t * math.pi) * 0.25
+                    if self._intro_timer >= 1.2:
+                        self._intro_phase = 2
+                        self._intro_timer = 0.0
+                        self.zoom = 1.45
+
+                # Phase 2: Right player closeup focus (1.8s)
+                elif self._intro_phase == 2:
                     self.target = self._right_target
+                    t = min(1.0, self._intro_timer / 1.8)
+                    self.zoom = 1.45 + (1.78 - 1.45) * (t * t)
+                    if self._intro_timer >= 1.8:
+                        self._intro_phase = 3
+                        self._intro_timer = 0.0
+                        self.target = self._arena_center
 
-            # Phase 1: Smooth gliding pan across arena to right player (1.4s)
-            elif self._intro_phase == 1:
-                t = min(1.0, self._intro_timer / 1.4)
-                # Smoothstep curve
-                t_smooth = t * t * (3.0 - 2.0 * t)
-                self.center = self._left_target.lerp(self._right_target, t_smooth)
-                # Pull back slightly during pan then re-zoom
-                self.zoom = 1.70 - math.sin(t * math.pi) * 0.25
-                if self._intro_timer >= 1.4:
-                    self._intro_phase = 2
-                    self._intro_timer = 0.0
-                    self.zoom = 1.45
-
-            # Phase 2: Right player closeup focus - slowly zooms in while pausing (2.0s)
-            elif self._intro_phase == 2:
-                self.target = self._right_target
-                t = min(1.0, self._intro_timer / 2.0)
-                # Slow creeping zoom in on Player 2
-                self.zoom = 1.45 + (1.78 - 1.45) * (t * t)
-                if self._intro_timer >= 2.0:
-                    self._intro_phase = 3
-                    self._intro_timer = 0.0
-                    self.target = self._arena_center
-
-            # Phase 3: Smooth pull back & zoom out to full arena view (1.6s)
-            elif self._intro_phase == 3:
-                t = min(1.0, self._intro_timer / 1.6)
-                t_smooth = t * t * (3.0 - 2.0 * t)
-                self.center = self._right_target.lerp(self._arena_center, t_smooth)
-                self.zoom = 1.78 + (1.0 - 1.78) * t_smooth
-                if self._intro_timer >= 1.6:
-                    self._intro_phase = 4
-                    self._intro_timer = 0.0
-                    self.zoom = 1.0
-                    self.target_zoom = 1.0
-                    self._intro_active = False
-                    self._intro_finished = True
+                # Phase 3: Smooth pull back & zoom out to full arena view (1.4s)
+                elif self._intro_phase == 3:
+                    t = min(1.0, self._intro_timer / 1.4)
+                    t_smooth = t * t * (3.0 - 2.0 * t)
+                    self.center = self._right_target.lerp(self._arena_center, t_smooth)
+                    self.zoom = 1.78 + (1.0 - 1.78) * t_smooth
+                    if self._intro_timer >= 1.4:
+                        self._intro_phase = 4
+                        self._intro_timer = 0.0
+                        self.zoom = 1.0
+                        self.target_zoom = 1.0
+                        self._intro_active = False
+                        self._intro_finished = True
 
         else:
             # Standard gameplay smooth camera tracking

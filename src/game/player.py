@@ -98,8 +98,8 @@ class Player:
         return (self.position.x, self.position.y - self.height / 2)
 
     def alive(self) -> bool:
-        """Check if player still has health."""
-        return self.health > 0
+        """Check if player still has health and remaining time."""
+        return self.health > 0 and self.timer > 0
 
     def equip(self, item: any = None) -> None:
         """Deprecated: The game is purely melee combat."""
@@ -313,6 +313,12 @@ class Player:
         self.anim_time += dt
         self.prev_bottom = self.position.y
 
+        # Match Timer ticks down over time
+        if self.alive():
+            self.timer = max(0.0, self.timer - dt)
+            if self.timer <= 0.0:
+                self.health = 0.0  # Runs out of time: defeated / turned to zombie
+
         # Timers decay
         if self.attack_cooldown > 0:
             self.attack_cooldown = max(0.0, self.attack_cooldown - dt)
@@ -442,17 +448,24 @@ class Player:
 
         z = camera.zoom
 
-        # House palette
-        if self.player_id == 1:
-            house_primary = (196, 30, 58)    # Gryffindor Crimson
-            house_accent = (255, 215, 0)     # Gryffindor Gold
-            hat_color = (160, 24, 46)
-        else:
-            house_primary = (27, 85, 62)     # Slytherin Emerald
-            house_accent = (215, 225, 230)   # Slytherin Silver
-            hat_color = (20, 65, 48)
+        # AGENTS.md rule:
+        # As the timer goes down to the left side, the player becomes more green/zombie, the right side it becomes more yellow/human.
+        timer_ratio = max(0.0, min(1.0, self.timer / max(1.0, self.max_timer)))
 
-        stick_color = (255, 255, 255) if self.damage_flash > 0 else (22, 22, 26)
+        # Zombie Green (60, 190, 70) to Human Yellow (255, 230, 60)
+        z_r, z_g, z_b = 60, 190, 70
+        h_r, h_g, h_b = 255, 230, 60
+        body_r = int(z_r + (h_r - z_r) * timer_ratio)
+        body_g = int(z_g + (h_g - z_g) * timer_ratio)
+        body_b = int(z_b + (h_b - z_b) * timer_ratio)
+        human_or_zombie_color = (body_r, body_g, body_b)
+
+        stick_color = (255, 255, 255) if self.damage_flash > 0 else human_or_zombie_color
+
+        # Accessory palette
+        house_primary = (196, 30, 58)
+        house_accent = (255, 215, 0)
+        hat_color = (160, 24, 46)
 
         # 1. Protective Robe Shield Bubble
         if self.shield_timer > 0:
@@ -573,6 +586,26 @@ class Player:
             (head_cx + int(8 * z), hat_brim_y - 1),
         ]
         pygame.draw.polygon(surface, house_accent, band_pts)
+
+        # 6b. Arc over the player indicating the timer (AGENTS.md)
+        arc_radius = max(16, int(30 * z))
+        arc_cx = head_cx
+        arc_cy = head_cy - int(32 * z)
+        arc_rect = pygame.Rect(arc_cx - arc_radius, arc_cy - arc_radius, arc_radius * 2, arc_radius * 2)
+
+        # Background track arc (dark semi-circle over player)
+        pygame.draw.arc(surface, (45, 52, 65), arc_rect, 0.0, math.pi, max(2, int(4 * z)))
+
+        # Active timer arc: As timer goes down to the left side, it recedes towards the left (pi)
+        if timer_ratio > 0.01:
+            start_angle = math.pi - (timer_ratio * math.pi)
+            stop_angle = math.pi
+            pygame.draw.arc(surface, human_or_zombie_color, arc_rect, start_angle, stop_angle, max(2, int(4 * z)))
+
+            # Active tip indicator pip
+            tip_x = arc_cx + int(arc_radius * math.cos(start_angle))
+            tip_y = arc_cy - int(arc_radius * math.sin(start_angle))
+            pygame.draw.circle(surface, (255, 255, 255), (tip_x, tip_y), max(2, int(3 * z)))
 
         # 7. Arms & Melee Strike Thrust
         shoulder_y = neck_y + int(4 * z)

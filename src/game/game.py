@@ -39,10 +39,7 @@ class Game:
         """Transition application state."""
         self.state = state
         if state == "intro":
-            self.world.camera.start_intro(
-                self.world.left_player.center(),
-                self.world.right_player.center(),
-            )
+            self.world.camera.start_intro(self.world.player.center())
         elif state == "quit":
             self.quit()
 
@@ -76,15 +73,21 @@ class Game:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.change_state("menu")
                 return
-            # Debug key 'c' to trigger checkpoint and shop directly
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_c:
-                self.world.checkpoint_manager.trigger_checkpoint(self.world.left_player)
+            # Test checkpoint button click or hotkeys [C] / [T]
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if self.ui.test_checkpoint_btn.collidepoint(event.pos):
+                    self.world.checkpoint_manager.trigger_checkpoint(self.world.player)
+                    self.change_state("checkpoint_shop")
+                    return
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_c, pygame.K_t):
+                self.world.checkpoint_manager.trigger_checkpoint(self.world.player)
                 self.change_state("checkpoint_shop")
                 return
+
             self.world.handle_event(event)
 
         elif self.state == "checkpoint_shop":
-            choice = self.world.checkpoint_manager.handle_event(event, self.world.left_player)
+            choice = self.world.checkpoint_manager.handle_event(event, self.world.player)
             if choice is not None:
                 self.change_state("playing")
 
@@ -131,19 +134,18 @@ class Game:
 
         elif self.state in ("intro", "playing"):
             self.world.draw(self.screen)
-            self.ui.draw_hud(self.screen, self.world.left_player, self.world.right_player)
+            self.ui.draw_hud(self.screen, self.world.player, checkpoint_manager=self.world.checkpoint_manager)
 
         elif self.state == "checkpoint_shop":
             self.world.draw(self.screen)
-            self.ui.draw_hud(self.screen, self.world.left_player, self.world.right_player)
-            self.world.checkpoint_manager.draw(self.screen, self.world.left_player)
+            self.ui.draw_hud(self.screen, self.world.player, checkpoint_manager=self.world.checkpoint_manager)
+            self.world.checkpoint_manager.draw(self.screen, self.world.player)
 
         elif self.state == "game_over":
             self.world.draw(self.screen)
-            self.ui.draw_hud(self.screen, self.world.left_player, self.world.right_player)
+            self.ui.draw_hud(self.screen, self.world.player, checkpoint_manager=self.world.checkpoint_manager)
             winner = self.world.winner()
-            if winner:
-                self.ui.draw_result(self.screen, winner)
+            self.ui.draw_result(self.screen, winner)
 
         pygame.display.flip()
 

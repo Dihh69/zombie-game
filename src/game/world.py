@@ -32,46 +32,37 @@ class World:
         self.platforms: list[Platform] = create_arena(self.world_bounds)
 
         self.players: list[Player] = []
+        self.player: Player
         self.left_player: Player
         self.right_player: Player
 
         self.reset()
 
     def reset(self) -> None:
-        """Reset match state, spawn fresh players, and initiate cinematic intro camera."""
+        """Reset match state, spawn single hero, and initiate cinematic intro camera."""
         self.effects.clear()
         self.checkpoint_manager.reset()
         self.platforms = create_arena(self.world_bounds)
 
-        # Spawn Left player (Player 1) on arena ground
+        # Spawn single Hero on arena ground
         floor_y = float(self.world_bounds.bottom - 90)
-        spawn_left = (240.0, floor_y)
+        spawn_pos = (float(self.world_bounds.centerx), floor_y)
         p1 = Player(
             player_id=1,
-            spawn=spawn_left,
+            spawn=spawn_pos,
             controls=self.config.controls.left,
             assets=self.assets,
             config=self.config,
         )
         p1.on_ground = True
 
-        # Spawn Right player (Player 2) on arena ground
-        spawn_right = (float(self.world_bounds.right - 240), floor_y)
-        p2 = Player(
-            player_id=2,
-            spawn=spawn_right,
-            controls=self.config.controls.right,
-            assets=self.assets,
-            config=self.config,
-        )
-        p2.on_ground = True
-
-        self.players = [p1, p2]
+        self.player = p1
+        self.players = [p1]
         self.left_player = p1
-        self.right_player = p2
+        self.right_player = p1
 
-        # Start non-blocking intro pan sequence
-        self.camera.start_intro(p1.center(), p2.center())
+        # Start cinematic intro focusing on the hero
+        self.camera.start_intro(p1.center())
 
     def handle_event(self, event: pygame.event.Event) -> None:
         """Route input events to players."""
@@ -151,15 +142,9 @@ class World:
                     pygame.draw.rect(surface, (14, 18, 28), (bx, s_rect.top - emb_h, emb_w, emb_h))
 
     def finished(self) -> bool:
-        """Check if round has concluded due to a player's health reaching zero."""
-        return not (self.left_player.alive() and self.right_player.alive())
+        """Check if round has concluded due to hero defeat or timeout."""
+        return not self.player.alive()
 
     def winner(self) -> Player | None:
-        """Retrieve the winning player entity or None if ongoing."""
-        if not self.finished():
-            return None
-        if self.left_player.alive() and not self.right_player.alive():
-            return self.left_player
-        if self.right_player.alive() and not self.left_player.alive():
-            return self.right_player
-        return self.left_player  # tie fallback
+        """Retrieve the player entity if surviving."""
+        return self.player if self.player.alive() else None

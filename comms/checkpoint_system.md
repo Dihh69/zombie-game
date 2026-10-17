@@ -1,13 +1,14 @@
 # Checkpoint System & Pure Melee Combat
 
 **Author / Machine:** Dihh69  
-**Feature:** Checkpoint Progression, Upgrade Shop & Pure Melee Combat System  
+**Feature:** Single-Player Checkpoint Progression, Upgrade Shop, Pure Melee Combat & Arc Timer  
 **Status:** Implemented & Tested  
 
 ---
 
 ## 1. Overview
 As specified in `AGENTS.md` and user requirements:
+- The game is **Single Player**: only one hero is spawned in the arena, with camera focus and single-player HUD.
 - A checkpoint is triggered after every **5 waves** (with 3 zombies per wave).
 - After **3 checkpoints**, the game prepares for the final boss fight (`is_boss_ready = True`).
 - **Every checkpoint:**
@@ -20,7 +21,22 @@ As specified in `AGENTS.md` and user requirements:
 
 ---
 
-## 2. Pure Melee Combat System (Weapons Removed)
+## 2. Timer System & Visual Arc
+- **Timer Decay**: In `playing` state, `player.timer` steadily counts down by `dt` every second.
+- **Defeat on Timeout**: If `player.timer <= 0.0`, the hero turns into a zombie and the game ends.
+- **Arc over the Player (`AGENTS.md`)**:
+  - A semicircular gauge arc is rendered directly above the player's head.
+  - The arc starts from the right (100% human, yellow) and recedes down to the left (0% zombie, green).
+  - The stickman player's body and head dynamically interpolate colors from **Yellow (Human)** to **Green (Zombie)** as time elapses.
+- **Time Bonuses / Penalties (`AGENTS.md`)**:
+  - Attack & Hit: `+1` unit of time (`player.add_time(1.0)`).
+  - Attack & Miss: `-1` unit of time (`player.add_time(-1.0)`).
+  - Kill Zombie: `+3` units of time (`player.add_time(3.0)`).
+  - Hit by Zombie: `-5` units of time (`player.add_time(-5.0)`).
+
+---
+
+## 3. Pure Melee Combat System (Weapons Removed)
 The weapon system from the base game (sky item drops, guns, bombs, wands, robes, and projectiles) has been **completely removed**:
 - The game is now **purely melee**.
 - Every attack creates a **box attack radius** (`pygame.Rect`) extending forward in the direction the player is facing:
@@ -28,27 +44,20 @@ The weapon system from the base game (sky item drops, guns, bombs, wands, robes,
   - Height: 58 px
   - Function: `player.get_melee_attack_box() -> pygame.Rect`
 - Visuals: Procedural melee fist thrust and dynamic crescent slash arc rendered within the attack box in the facing direction.
-- Combat Rules (`AGENTS.md`):
-  - **Hit:** Striking an enemy deals `base_melee_damage * attack_damage_multiplier`, applies knockback, and gains **+1 unit of time** (`player.add_time(1.0)`).
-  - **Kill:** Slaying an enemy awards **+3 units of time** (`player.add_time(3.0)`).
-  - **Miss:** Swinging and failing to hit any target incurs a **-1 unit of time** penalty (`player.add_time(-1.0)`).
 
 ---
 
-## 3. Controls & Interaction in Shop
-The shop can be navigated using either keyboard or mouse:
-- **Direct Hotkeys:** Press `[1]` to select Attack Speed, or `[2]` to select Attack Damage.
-- **Arrow Keys:** Press `Left` / `A` or `Right` / `D` to highlight a card, then press `[ENTER]` or `[SPACE]` to confirm.
-- **Mouse:** Hovering over either card highlights it; left-clicking the card or its button confirms the upgrade.
-- **Debug Key:** During gameplay, pressing `[C]` immediately triggers a checkpoint and opens the shop for testing.
+## 4. On-Screen Test Button & Shortcuts
+- An interactive **`[ ⚡ SKIP TO CHECKPOINT ]`** test button is rendered at the top-right of the HUD.
+- Clicking the button with the mouse immediately triggers a checkpoint, fully replenishes the timer, and opens the upgrade shop.
+- Hotkeys **`[C]`** or **`[T]`** during gameplay also instantly trigger the checkpoint.
 
 ---
 
-## 4. Public API for Teammates
+## 5. Public API for Teammates
 
 ### `Player` (`src/game/player.py`)
-Other modules (e.g. Wave System, Zombie AI, Timer Arc UI) can directly use the following attributes and methods on `Player`:
-- `player.timer: float` - Current remaining time units.
+- `player.timer: float` - Current remaining time units (decays over time).
 - `player.max_timer: float` - Maximum time capacity (default: 60.0).
 - `player.replenish_timer() -> None` - Resets `player.timer = player.max_timer`.
 - `player.add_time(amount: float) -> None` - Adds or deducts time units clamped between 0 and `max_timer`.
@@ -74,14 +83,12 @@ Accessible via `world.checkpoint_manager`:
 - `checkpoint_manager.current_wave: int`
   Current wave number.
 
-### `Game` (`src/game/game.py`)
-- State `"checkpoint_shop"` is handled by the state machine to pause normal updates and render the shop overlay on top of the arena.
-
 ---
 
-## 5. Modified & Added Files
+## 6. Modified & Added Files
 - `src/game/checkpoint.py`: `UpgradeType`, `ShopMenu`, and `CheckpointManager`.
-- `src/game/player.py`: Removed weapons; implemented pure melee combat with box attack radius in facing direction, attack cooldown, dynamic slash arc visuals, and timer gain/loss rules.
-- `src/game/world.py`: Removed weapon drops, spawner, and projectile manager; integrated pure melee attacks and `CheckpointManager`.
-- `src/game/ui.py`: Removed held weapon indicators; added Timer and Melee Combat stat indicators.
-- `src/game/game.py`: Added `"checkpoint_shop"` state, event handling, update, and drawing.
+- `src/game/player.py`: Single hero attributes, timer decay, Arc gauge rendering, green/yellow transition, melee box attack radius.
+- `src/game/world.py`: Single-player spawning, finished/winner conditions, melee combat routing.
+- `src/game/ui.py`: Single-player HUD, on-screen `[ ⚡ SKIP TO CHECKPOINT ]` test button, timer & combat stats display.
+- `src/game/camera.py`: Single-player cinematic intro zoom and tracking.
+- `src/game/game.py`: Single-player loop, test button event handling, and checkpoint shop transitions.
